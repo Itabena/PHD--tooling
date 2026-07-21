@@ -1,0 +1,11 @@
+# Normalize text to LF on commit, on every platform.
+* text=auto
+
+# Force LF on checkout everywhere for the files whose exact bytes must stay
+# stable across machines: the skill scripts and docs, and — the reason this
+# file exists — the quiz test fixtures and golden, which are compared
+# byte-for-byte and would otherwise fail on a CRLF checkout.
+*.py   text eol=lf
+*.md   text eol=lf
+*.txt  text eol=lf
+*.json text eol=lf
