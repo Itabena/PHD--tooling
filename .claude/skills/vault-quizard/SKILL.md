@@ -146,6 +146,19 @@ for `.../ITFNS/Lecture notes/Chapter 1 (ITFNS).md` that's `.../ITFNS/Quizzes/`
 Override with `-o`/`--bank-out` when the guess is wrong (a paper has no natural
 per-paper folder of its own, so it falls back to a shared `Quizzes/` next to it).
 
+**Known gap (found 2026-07-23, not yet fixed): there is no dry-run/verify-only
+mode.** `--bank-out` is "always written alongside the Markdown quiz, not
+optional," per its own `--help` text — but the documented workflow has a
+deliberate stop point ("I do: review the questions Claude shows before
+anything gets built into a takeable quiz," per `Using the Vault Tools.md`),
+and `build_quiz.py` currently cannot honor that stop point on its own: running
+it at all writes the takeable bank. Until someone adds a `--check`/`--dry-run`
+flag that verifies quotes, balance, and the length backstop without writing
+either output file, honoring the review stop point means checking quotes by
+hand outside the tool (a small script doing the same normalized-substring
+match `normalize_ws` does) and only running `build_quiz.py` for real once the
+questions are actually approved.
+
 ## Rejecting a question
 
 A rejection is logged, not just discarded — saying "this question is bad" is
