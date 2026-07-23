@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -295,6 +296,13 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("-o", "--out", required=True, help="output PNG path")
     parser.add_argument("--tmp-dir", default="/tmp", help="scratch dir for the rendered page PNG")
     args = parser.parse_args(argv)
+
+    if shutil.which(PDFTOTEXT) is None or shutil.which(PDFTOPPM) is None:
+        print(
+            "poppler not found -- run via `micromamba run -n pdftools`",
+            file=sys.stderr,
+        )
+        return 2
 
     try:
         out_path = crop_exercise(

@@ -116,6 +116,7 @@ import argparse
 import datetime as _dt
 import json
 import os
+import posixpath
 import random
 import re
 import sys
@@ -624,12 +625,17 @@ def default_quiz_dir(source_file: str) -> str:
 
     A heuristic, not a guarantee -- pass --out/--bank-out explicitly whenever
     this guesses wrong (e.g. a paper with no natural per-paper folder of its
-    own). Operates on the vault-relative source_file path, not an absolute one.
+    own). Operates on the vault-relative source_file path, not an absolute
+    one -- vault-relative paths are always forward-slash (Obsidian's own
+    convention), regardless of host OS, so this uses posixpath rather than
+    os.path: os.path.join on Windows would splice in a backslash and produce
+    a mixed-separator string that no longer matches the rest of the
+    vault-relative path.
     """
-    parent = os.path.dirname(source_file)
-    if os.path.basename(parent).lower() in _CONTAINER_SUBFOLDER_NAMES:
-        parent = os.path.dirname(parent)
-    return os.path.join(parent, "Quizzes")
+    parent = posixpath.dirname(source_file)
+    if posixpath.basename(parent).lower() in _CONTAINER_SUBFOLDER_NAMES:
+        parent = posixpath.dirname(parent)
+    return posixpath.join(parent, "Quizzes")
 
 
 # --------------------------------------------------------------------------- #
