@@ -1,0 +1,31 @@
+# glyph-map.tsv
+#
+# Deterministic post-extraction repair table for vault-source-ingest.
+# Format: two tab-separated columns, `from<TAB>to`. Plain string substitution
+# only — no regex, no LaTeX wrapping, no inference. Applied in file order;
+# each row is a literal find/replace over the raw tool output.
+#
+# This file must be byte-identical across machines. It is the canonical
+# artifact (a - logistics/Source Note Types.md, "What exactly gets frozen"):
+# the frozen <source name>.extract.txt is this map applied to the raw tool
+# output, so a substitution here changes what future quote-matching checks
+# against. A row removed or edited does not retroactively fix an already-
+# frozen .extract.txt — that takes a re-extraction, producing a new dated file.
+#
+# What belongs here: 1:1 character/sequence substitutions that are correct
+# regardless of source PDF — standard ligature codepoints decomposed to their
+# ASCII letter sequence, and specific tool-glyph-name artifacts confirmed by
+# inspecting real extractor output (not guessed in advance).
+#
+# What does NOT belong here: letter-spacing collapse ("T w o" -> "Two"). There
+# is no lookup table for that — single letters separated by spaces are
+# everywhere in stat-mech notation (n k T, loose indices), so a rejoin rule
+# corrupts legitimate physics as often as it fixes garbled prose. That failure
+# mode is detected and flagged, never repaired; see the standard.
+
+# --- Standard Unicode ligature decompositions (tool-agnostic) ---
+ﬁ	fi
+ﬂ	fl
+ﬀ	ff
+ﬃ	ffi
+ﬄ	ffl

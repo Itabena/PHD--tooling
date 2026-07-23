@@ -1,9 +1,9 @@
 ---
-name: vault-quiz
+name: vault-quizard
 description: "Generate a multiple-choice quiz from a markdown source note in the Notes_phd vault, following the item-quality and rejection rules in Quiz Standards.md. Sources are markdown notes only; PDF quote-matching is deferred until the extraction artifact exists."
 ---
 
-# vault-quiz
+# vault-quizard
 
 Generates a self-quiz from a source note so I can test whether I actually
 absorbed it. The governing document is `a - logistics/Quiz Standards.md` in the

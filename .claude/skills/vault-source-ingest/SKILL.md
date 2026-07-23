@@ -144,20 +144,75 @@ Lean toward eager (an empty folder is cheap, a missing one interrupts later) but
 the lean is not strong enough to assume — wait for the answer before creating
 anything under `Exercises/`. The standard explains why this stays a question.
 
-## Deferred: the `.extract.txt` extraction artifact
+#### Shape of an exercise stub
 
-Source Note Types describes freezing the PDF's extracted text into a
-`<source name>.extract.txt` at ingest. **Do not create it yet.** Nothing consumes
-it until PDF quizzing exists — `vault-quiz` is markdown-only today and its
-PDF/`.extract.txt` quote-matching is deferred for the same reason. Build it when
-`vault-quiz` grows the PDF path, so the format is exercised the day it is written
-rather than guessed at now. Reading a PDF to recover citation metadata and
-chapter titles for the scaffolding is fine — that is different from persisting the
-frozen artifact.
+When exercises are extracted (options 1 or 3), the shape is **one folder per
+chapter, `Exercises/Chapter N/`, with one note per exercise inside it** — not a
+flat folder of compound-named files, and *not one note per chapter* (the first
+Pathria ingest's mistake: it read the paragraph above literally and produced
+sixteen chapter stubs). A chapter's problems belong together and reachable on
+their own; a flat list across every chapter is hundreds of files in one place.
+
+Each exercise note carries two blocks: the **statement at the top**, and an
+**empty attempt block** below it. The attempt block is empty for the same reason
+every other stub body is — that part is the work.
+
+#### Where the statement comes from — never a model
+
+The statement is the one place a model must not write the content. A retyped
+exercise drifts silently — a flipped sign, a dropped subscript, a lost condition
+in a subclause — and a subtly wrong statement costs hours spent carefully solving
+the wrong problem. So the statement is **extracted mechanically** — pulled from
+the PDF with nothing in between that could paraphrase — then run through the
+glyph map below, never through a model. Fallbacks, in order:
+
+1. **Extracted + glyph-mapped text** by default (see below).
+2. **A cropped screenshot** of the exercise embedded in the stub, when the
+   extraction is unreadable — math-heavy exercises extract as noise. No model
+   touches the content either way; the cost is the image is not searchable or
+   quotable, so a quiz can never cite it (acceptable for a statement I read
+   rather than search).
+3. **A pointer** — chapter, problem number, page — when there is neither. An
+   honest pointer beats a plausible transcription.
+
+Never let a model fill the gap between these steps.
+
+## The extraction artifact: what gets frozen
+
+Implements `a - logistics/Source Note Types.md` -> "What exactly gets frozen"
+(decided 23/07/2026) — read that section for the reasoning; this is the
+mechanics. Extraction is two steps, and each freezes its own file, sitting
+beside the note it serves, both frozen at ingest and never overwritten on
+re-extraction (a new dated file instead):
+
+1. **Tool extracts.** Run `pdftotext -layout` (poppler) over the PDF pages the
+   note covers. This raw output is frozen unchanged as `<source name>.raw.txt`.
+2. **Map repairs.** Run the raw text through `extraction/apply_glyph_map.py` in
+   the tooling repo, against `extraction/glyph-map.tsv` — a plain, ordered,
+   literal find/replace table (no regex, no inference, no LaTeX wrapping). The
+   **result is the canonical artifact**, frozen as `<source name>.extract.txt`.
+   Quote-matching (`vault-quizard`, once its PDF path exists) checks against
+   this file, not the raw one — freezing the raw text but mapping downstream
+   would make a quote containing a repaired glyph fail a check it should pass.
+
+The map is a **versioned data file in the tooling repo**
+(`phd-tooling/extraction/glyph-map.tsv`), not prose here, because it must be
+byte-identical on every machine — a map that drifts between Mac and Windows
+means the same PDF extracts to two different frozen files. It holds 1:1
+substitutions only: standard ligature decompositions, and specific extractor
+glyph-name artifacts confirmed against real output (never guessed in advance).
+
+**Letter-spacing is not the map's job.** A word extracted as separated
+characters (`T w o s y s t e m s`) has no lookup-table fix — single letters
+separated by spaces are everywhere in physics notation (`n k T`, a loose index),
+so a rejoin rule would corrupt legitimate notation as often as it fixes garbled
+prose. `apply_glyph_map.py --flag-letter-spacing` detects a suspected run and
+reports it; it never rewrites. A flagged line is a candidate for the screenshot
+fallback above, decided by hand.
 
 ## See also
 
 - [[a - logistics/Source Note Types|Source Note Types]] — the governing standard
 - [[aa- Dashboard|AI Use Policy]] — scaffolding vs. review-required tiers
 - [[a - logistics/Writing Style and Voice|Writing Style and Voice]] — governs how the body gets written (by me, later)
-- `vault-quiz` — the downstream consumer whose PDF path gates the `.extract.txt` deferral
+- `vault-quizard` — the downstream consumer of `<source name>.extract.txt`; its own PDF/quote-matching path is still deferred until that skill grows one
