@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Tests for build_quiz.py. Runs standalone: `python3 tests/test_build_quiz.py`.
 
-Everything is exercised against markdown, since markdown notes are the only
-sources this skill builds from right now.
+The verbatim-match mechanics are exercised against markdown fixtures here
+(cheap, deterministic); the ITFNS regression additionally proves the parser on
+real course content. `source_file` in production points at a chapter's frozen
+`.extract.txt` -- the check works identically against either, which is what
+these markdown fixtures stand in for.
 """
+import json
 import os
 import random
 import re
@@ -396,6 +400,120 @@ def test_itfns_regression_mc_key_is_balanced():
     # Only single-correct MC gets a balanced position key.
     counts = Counter(q.correct_indices[0] for q in draft.questions if q.kind == "mc")
     assert max(counts.values()) - min(counts.values()) <= 1
+
+
+# --------------------------------------------------------------------------- #
+# Question bank (the durable JSON artifact)
+# --------------------------------------------------------------------------- #
+
+def test_generate_bank_is_json_serializable_and_shaped():
+    draft = _load_fixture()
+    warnings = bq.build(draft, seed=1)
+    bank = bq.generate_bank(draft, warnings, generated_date="2026-07-23")
+    serialized = json.dumps(bank)  # must not raise
+    reloaded = json.loads(serialized)
+    assert reloaded["source_file"] == draft.source_file
+    assert reloaded["generated"] == "2026-07-23"
+    assert reloaded["question_count"] == len(draft.questions)
+    assert len(reloaded["questions"]) == len(draft.questions)
+    q0 = reloaded["questions"][0]
+    for key in ("number", "title", "stem", "kind", "options", "correct_indices",
+                "source_file", "location", "quote", "warnings"):
+        assert key in q0
+
+
+def test_generate_bank_options_and_correct_indices_match_built_draft():
+    draft = _load_fixture()
+    bq.build(draft, seed=2)
+    bank = bq.generate_bank(draft, [])
+    for i, q in enumerate(draft.questions):
+        bq_json = bank["questions"][i]
+        assert bq_json["options"] == q.options
+        assert bq_json["correct_indices"] == q.correct_indices
+
+
+def test_generate_bank_attaches_warnings_to_the_right_question():
+    text = (
+        "## Q1\ns\n- [x] a\n- [ ] b\n- [ ] c\n"  # no location -> traceability warning
+        "## Q2\ns\n- [x] a\n- [ ] b\n- [ ] c\n\nlocation: x\n"  # clean
+    )
+    draft = bq.parse_draft(text)
+    warnings = bq.build(draft, seed=0)
+    bank = bq.generate_bank(draft, warnings)
+    assert len(bank["questions"][0]["warnings"]) == 1
+    assert bank["questions"][0]["warnings"][0]["kind"] == "traceability"
+    assert bank["questions"][1]["warnings"] == []
+
+
+def test_cli_writes_bank_json_alongside_quiz_md(tmp_path=None):
+    import subprocess
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        draft_path = os.path.join(d, "note.quiz-draft.md")
+        with open(FIXTURE, encoding="utf-8") as fh:
+            fixture_text = fh.read()
+        with open(draft_path, "w", encoding="utf-8") as fh:
+            fh.write(fixture_text)
+        script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build_quiz.py")
+        result = subprocess.run(
+            [sys.executable, script, draft_path, "--seed", "0"],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        bank_path = os.path.join(d, "note.quiz-bank.json")
+        assert os.path.exists(bank_path)
+        with open(bank_path, encoding="utf-8") as fh:
+            bank = json.load(fh)
+        assert bank["question_count"] == 4
+
+
+# --------------------------------------------------------------------------- #
+# Default output location: <book/course folder>/Quizzes/
+# --------------------------------------------------------------------------- #
+
+def test_default_quiz_dir_unwraps_extraction_container():
+    src = "Statistical Mechanics/Sources/Pathria/Extraction/Chapter 1.extract.txt"
+    assert bq.default_quiz_dir(src) == "Statistical Mechanics/Sources/Pathria/Quizzes"
+
+
+def test_default_quiz_dir_unwraps_lecture_notes_container():
+    src = "Phd courses/ITFNS/Lecture notes/Chapter 1 (ITFNS).md"
+    assert bq.default_quiz_dir(src) == "Phd courses/ITFNS/Quizzes"
+
+
+def test_default_quiz_dir_uses_immediate_parent_otherwise():
+    src = "Statistical Mechanics/Sources/Some Paper.md"
+    assert bq.default_quiz_dir(src) == "Statistical Mechanics/Sources/Quizzes"
+
+
+def test_cli_defaults_output_into_book_quizzes_folder_when_vault_known():
+    import subprocess
+    import tempfile
+    with tempfile.TemporaryDirectory() as vault:
+        os.makedirs(os.path.join(vault, ".obsidian"))
+        book_dir = os.path.join(vault, "Statistical Mechanics", "Sources", "Pathria")
+        extraction_dir = os.path.join(book_dir, "Extraction")
+        os.makedirs(extraction_dir)
+        with open(os.path.join(extraction_dir, "Chapter 1.extract.txt"), "w", encoding="utf-8") as fh:
+            fh.write("free energy is the part of the internal energy that is free to become work")
+
+        draft_path = os.path.join(vault, "scratch.quiz-draft.md")
+        with open(draft_path, "w", encoding="utf-8") as fh:
+            fh.write(
+                "---\nsource_file: Statistical Mechanics/Sources/Pathria/Extraction/Chapter 1.extract.txt\n---\n\n"
+                "## Q1\ns\n- [x] free energy is the part of the internal energy that is free to become work\n"
+                "- [ ] b\n- [ ] c\n\n"
+                "quote: free energy is the part of the internal energy that is free to become work\nlocation: x\n"
+            )
+        script = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build_quiz.py")
+        result = subprocess.run(
+            [sys.executable, script, draft_path, "--vault-root", vault, "--seed", "0"],
+            capture_output=True, text=True,
+        )
+        assert result.returncode == 0, result.stderr
+        expected_dir = os.path.join(book_dir, "Quizzes")
+        assert os.path.exists(os.path.join(expected_dir, "scratch.quiz.md"))
+        assert os.path.exists(os.path.join(expected_dir, "scratch.quiz-bank.json"))
 
 
 # --------------------------------------------------------------------------- #

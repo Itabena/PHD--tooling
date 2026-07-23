@@ -21,16 +21,40 @@ build step, and nothing else:
      failure -- consistent with the standard's rule that a check you disable is
      worth nothing.
 
-Sources are markdown notes (the read -> exercises -> quiz workflow), so both the
-input draft and the output quiz are markdown. It also runs the standard's core
-check: a literal substring match of each `source_quote` against the contents of
-its `source_file`, raising a per-question warning on a miss (never a build
-failure -- the question still ships, flagged, carrying its location so it can be
-adjudicated by hand at quiz time). The match is literal up to whitespace, so a
-quote that wraps across a line in the source still matches. The PDF
-`.extract.txt` path in the standard -- with its fuzzy near-miss vs total-miss
-handling -- stays deferred until `vault-source-ingest` freezes an extraction
-artifact to run it against; there is nothing to exercise that machinery on yet.
+A draft is scoped to one chapter (`a - logistics/Quiz Standards.md` ->
+"Scope: one chapter at a time" -- a quiz is assembled from chapters, never
+generated per book). `source_file` should point at that chapter's frozen
+`<name>.extract.txt` wherever one exists -- questions come from sources, not
+from personal reading notes, because the trust is different: a `#needs-review`
+note might be wrong in a way a mechanically frozen extract cannot be. A
+markdown note remains an architecturally valid `source_file` (the verbatim
+check works identically against either), but only one that is not itself
+`#needs-review` -- generating off an unchecked draft tests the reading against
+the draft, not against the book.
+
+The build runs the standard's core check: a literal substring match of each
+`source_quote` against the contents of its `source_file`, raising a per-question
+warning on a miss (never a build failure -- the question still ships, flagged,
+carrying its location so it can be adjudicated by hand at quiz time). The match
+is literal up to whitespace, so a quote that wraps across a line in the source
+still matches. Per the standard, a mismatch increasingly often means "check the
+extraction" rather than "the model lied," since poppler's glyph-repair fallback
+byte is not one-to-one (see `a - logistics/Source Note Types.md`) -- read a
+quote-match warning as an extraction-artifact candidate first, fabrication
+second.
+
+Two durable outputs come out of a build: a human-readable `*.quiz.md` for
+at-a-glance review, and a `*.quiz-bank.json` question bank -- the artifact the
+standard says is durable across a book, since "any individual quiz is just a
+view over it." An HTML quiz builder (or a future multi-chapter assembler) reads
+the bank, never the draft; combining chapters is concatenating their banks, no
+chapter's source ever reloaded.
+
+One rule that binds the *generating* step, not this build script, but belongs on
+record here: **never generate a question from compressed text.** A
+`source_quote` lifted from a compressed rendering of the chapter is a quote of
+the compression, not of the source -- pull the exact span from the uncompressed
+extract at the moment of writing the quote, every time.
 
 Draft format (`*.quiz-draft.md`)
 --------------------------------
@@ -90,6 +114,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import json
 import os
 import random
 import re
@@ -532,6 +557,82 @@ def render_markdown(draft: Draft, warnings: list["Warning"]) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# Question bank (JSON) -- the durable artifact
+# --------------------------------------------------------------------------- #
+
+def generate_bank(draft: Draft, warnings: list["Warning"], generated_date: Optional[str] = None) -> dict:
+    """Serialize the built draft to the question-bank JSON structure.
+
+    Per `a - logistics/Quiz Standards.md` -> "Scope: one chapter at a time," a
+    quiz is assembled from chapters, not generated per book: each chapter is
+    generated and verified against its own extract, and "the question bank
+    becomes the durable artifact... any individual quiz is just a view over it."
+    This is that artifact. The Markdown output (`render_markdown`) is a
+    convenient human-readable rendering of the same data for at-a-glance review;
+    this JSON is what an assembler (the HTML quiz builder, or a future
+    multi-chapter combiner) actually reads. Assembling several chapters is then
+    just concatenating their `questions` arrays -- no chapter's source is ever
+    re-loaded to build a combined quiz.
+
+    Each question carries its own warnings (a subset of `warnings` filtered to
+    that question's number) so a downstream consumer can render the same
+    conspicuousness the Markdown callouts give the quote-match failure, without
+    re-deriving it.
+    """
+    by_qnum: dict[int, list[dict]] = {}
+    for w in warnings:
+        by_qnum.setdefault(w.qnum, []).append({"kind": w.kind, "message": w.message})
+
+    questions_json = []
+    for i, q in enumerate(draft.questions, start=1):
+        questions_json.append({
+            "number": i,
+            "title": q.title,
+            "stem": q.stem,
+            "kind": q.kind,
+            "options": q.options,
+            "correct_indices": q.correct_indices,
+            "source_file": draft.source_file,
+            "location": q.location,
+            "quote": q.quote,
+            "warnings": by_qnum.get(i, []),
+        })
+
+    return {
+        "source_file": draft.source_file,
+        "generated": generated_date or _dt.date.today().isoformat(),
+        "question_count": len(questions_json),
+        "questions": questions_json,
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Default output location: <book/course folder>/Quizzes/
+# --------------------------------------------------------------------------- #
+
+# Recognized "container" subfolder names whose sibling, not themselves, is the
+# book/course folder a Quizzes/ output should nest under. E.g. a source_file of
+# ".../Pathria/Extraction/Chapter 1.extract.txt" belongs to the book at
+# ".../Pathria/", not to "Extraction/" itself; ".../ITFNS/Lecture notes/Chapter
+# 1 (ITFNS).md" belongs to the course at ".../ITFNS/". Matches the existing
+# ITFNS Quizzes/ folder exactly, which is the precedent this generalizes.
+_CONTAINER_SUBFOLDER_NAMES = {"extraction", "lecture notes"}
+
+
+def default_quiz_dir(source_file: str) -> str:
+    """The book/course folder's Quizzes/ subfolder for a given source_file.
+
+    A heuristic, not a guarantee -- pass --out/--bank-out explicitly whenever
+    this guesses wrong (e.g. a paper with no natural per-paper folder of its
+    own). Operates on the vault-relative source_file path, not an absolute one.
+    """
+    parent = os.path.dirname(source_file)
+    if os.path.basename(parent).lower() in _CONTAINER_SUBFOLDER_NAMES:
+        parent = os.path.dirname(parent)
+    return os.path.join(parent, "Quizzes")
+
+
+# --------------------------------------------------------------------------- #
 # CLI
 # --------------------------------------------------------------------------- #
 
@@ -550,6 +651,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--vault-root", default=None,
                         help="vault root for resolving source_file (default: discover "
                              "the .obsidian marker above the draft, or $NOTES_PHD_VAULT)")
+    parser.add_argument("--bank-out",
+                        help="question-bank JSON output path (default: DRAFT with "
+                             ".quiz-draft.md -> .quiz-bank.json) -- the durable, "
+                             "assemblable artifact; always written alongside the "
+                             "Markdown quiz, not optional")
     args = parser.parse_args(argv)
 
     with open(args.draft, encoding="utf-8") as fh:
@@ -575,17 +681,51 @@ def main(argv: Optional[list[str]] = None) -> int:
                      vault_root=vault_root)
     rendered = render_markdown(draft, warnings)
 
+    def _default_basename() -> str:
+        base = os.path.basename(args.draft)
+        if base.endswith(".quiz-draft.md"):
+            return base[: -len(".quiz-draft.md")]
+        return os.path.splitext(base)[0]
+
+    # Default output nests under <book/course folder>/Quizzes/, derived from
+    # source_file, whenever both a vault root and a source_file are known --
+    # this is the durable, findable home (matches the existing ITFNS Quizzes/
+    # folder). Falls back to sitting next to the draft otherwise (e.g. no
+    # vault context, or the draft has no source_file yet).
+    base_name = _default_basename()
+    default_dir = None
+    if vault_root and draft.source_file:
+        default_dir = os.path.join(vault_root, default_quiz_dir(draft.source_file))
+
     out_path = args.out
     if out_path is None:
-        if args.draft.endswith(".quiz-draft.md"):
+        if default_dir:
+            out_path = os.path.join(default_dir, base_name + ".quiz.md")
+        elif args.draft.endswith(".quiz-draft.md"):
             out_path = args.draft[: -len(".quiz-draft.md")] + ".quiz.md"
         else:
             out_path = args.draft.rsplit(".", 1)[0] + ".quiz.md"
 
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as fh:
         fh.write(rendered)
 
+    bank_path = args.bank_out
+    if bank_path is None:
+        if default_dir:
+            bank_path = os.path.join(default_dir, base_name + ".quiz-bank.json")
+        elif args.draft.endswith(".quiz-draft.md"):
+            bank_path = args.draft[: -len(".quiz-draft.md")] + ".quiz-bank.json"
+        else:
+            bank_path = args.draft.rsplit(".", 1)[0] + ".quiz-bank.json"
+    bank = generate_bank(draft, warnings)
+    os.makedirs(os.path.dirname(os.path.abspath(bank_path)), exist_ok=True)
+    with open(bank_path, "w", encoding="utf-8") as fh:
+        json.dump(bank, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+
     print(f"wrote {out_path} ({len(draft.questions)} questions)", file=sys.stderr)
+    print(f"wrote {bank_path} (question bank)", file=sys.stderr)
     for w in warnings:
         print(f"  [{w.kind}] {w}", file=sys.stderr)
     return 0

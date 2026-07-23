@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vault-quizard</title>
+<style>
+  :root {
+    --ink: #252524; --muted: #6b6b66; --line: #deddd6;
+    --paper: #f8f7f2; --card: #fffefa;
+    --accent: #315f73; --accent-soft: #dfeef2;
+    --good: #267044; --good-soft: #e2f2e8;
+    --bad: #a53b35; --bad-soft: #f9e5e3;
+    --notice: #a6790e; --notice-soft: #fbeecb;
+    --warn-soft: #fff1cb; --warn-line: #d39422;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: Charter, Georgia, "Times New Roman", serif;
+    font-size: 18px; line-height: 1.6;
+  }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 28px 20px 80px; }
+  h1 { font-size: clamp(1.6rem, 5vw, 2.1rem); line-height: 1.15; margin: 0 0 .45em; }
+  h2 { font-size: 1.2rem; margin-top: 1.6em; }
+  .muted { color: var(--muted); }
+  button {
+    font: inherit; cursor: pointer; border: 1px solid var(--line);
+    background: var(--card); color: var(--ink); border-radius: 10px; padding: 10px 17px;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.primary { color: white; background: var(--accent); border-color: var(--accent); }
+  button.primary:hover:not(:disabled) { filter: brightness(.92); }
+  textarea { font: inherit; width: 100%; }
+
+  #load { padding-top: min(8vh, 60px); }
+  .intro { max-width: 650px; }
+  .filebox {
+    border: 1.5px dashed var(--line); border-radius: 12px; padding: 20px;
+    text-align: center; margin: 18px 0; background: var(--card);
+  }
+  .bankline {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px;
+    margin: 6px 0; background: var(--card); font-size: .92rem;
+  }
+  .bankline .rm { color: var(--bad); cursor: pointer; border: none; background: none; padding: 2px 6px; }
+
+  .qhead {
+    display: grid; grid-template-columns: 1fr auto; gap: 5px 14px; align-items: baseline;
+    margin: -8px -8px 0; padding: 15px 8px 11px; border-bottom: 1px solid var(--line);
+  }
+  .qnum { font-weight: bold; }
+  .qsrc { color: var(--accent); font-size: .82rem; }
+  .qtext { margin: 24px 0 16px; font-size: 1.06em; white-space: pre-wrap; }
+  .hint { margin: -8px 0 13px; color: var(--muted); font-size: .88rem; }
+
+  .callout {
+    margin: 10px 0; padding: 10px 14px; font-size: .9rem; border-radius: 0 8px 8px 0;
+  }
+  .callout.danger { background: var(--bad-soft); border-left: 4px solid var(--bad); }
+  .callout.warn { background: var(--warn-soft); border-left: 4px solid var(--warn-line); }
+
+  .opt {
+    display: flex; gap: 12px; align-items: flex-start; width: 100%; text-align: left;
+    margin: 9px 0; padding: 12px 15px; border: 1.5px solid var(--line); border-radius: 12px;
+    background: var(--card); white-space: pre-wrap;
+  }
+  .opt .key { font-weight: bold; min-width: 1.3em; color: var(--accent); }
+  .opt.selected { border-color: var(--accent); background: var(--accent-soft); }
+  .opt.correct { border-color: var(--good); background: var(--good-soft); }
+  .opt.wrong { border-color: var(--bad); background: var(--bad-soft); }
+  .opt.locked { cursor: default; }
+
+  .verdict { font-weight: bold; margin-top: 14px; }
+  .verdict.ok { color: var(--good); }
+  .verdict.no { color: var(--bad); }
+
+  .feedback-row { margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .resp-btns { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+  .resp-btns button { flex: 1; min-width: 110px; }
+  .resp-btns button.chosen.accept { background: var(--good-soft); border-color: var(--good); }
+  .resp-btns button.chosen.notice { background: var(--notice-soft); border-color: var(--notice); }
+  .resp-btns button.chosen.reject { background: var(--bad-soft); border-color: var(--bad); }
+  select, .notebox {
+    width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--line);
+    border-radius: 8px; margin-top: 8px; background: var(--card); color: var(--ink);
+  }
+  .notebox { min-height: 4.5em; resize: vertical; }
+
+  .navrow { display: flex; gap: 9px; margin-top: 25px; flex-wrap: wrap; }
+  .spacer { flex: 1; }
+
+  .exportbox {
+    border: 1px solid var(--line); border-radius: 12px; padding: 14px 17px;
+    margin: 13px 0; background: var(--card);
+  }
+  pre.log {
+    margin: 10px 0 0; padding: 13px; overflow-x: auto; white-space: pre-wrap;
+    border-radius: 8px; background: #f1f0ea; font: .76rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    max-height: 260px; overflow-y: auto;
+  }
+  .copy-status { min-height: 1.4em; color: var(--good); font-size: .85rem; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <section id="load"></section>
+  <section id="quiz" hidden></section>
+  <section id="review" hidden></section>
+</main>
+<script>
+"use strict";
+
+/* ------------------------------------------------------------------ *
+ * vault-quizard HTML builder.
+ *
+ * Governed by a - logistics/Quiz Standards.md -> "Scope: one chapter at a
+ * time" and "The feedback loop". This is a single static HTML file with no
+ * server and no build step: it loads one or more *.quiz-bank.json files
+ * (the durable artifact build_quiz.py writes) at runtime via the browser's
+ * File API, and "assembling" a multi-chapter quiz is just picking more than
+ * one file -- no chapter's source is ever reloaded to do it.
+ *
+ * Options are rendered in the EXACT order the bank already gives them.
+ * build_quiz.py already computed the balanced-key permutation; re-shuffling
+ * here would destroy that balance property, so this file never shuffles an
+ * option list, only (optionally) the order questions are presented in.
+ *
+ * Per-question feedback (accept / slight notice / reject + free text) is
+ * captured on advancing to the next question, per the standard, and
+ * accumulated in memory for the whole session -- a static page has no disk
+ * to write to. At the end it is exported as two copy-paste JSONL blocks
+ * (chosen over a file download: pasting into an already-open file or chat
+ * is a plain interaction that works the same on every machine and app,
+ * where a downloaded file still has to be found and moved into place):
+ *   - a "rejections" block, schema-compatible with reject.py's entries,
+ *     meant to be appended to logs/rejections.jsonl in the phd-tooling repo
+ *   - a "full session" block covering every response including accepts,
+ *     meant to be appended to logs/responses.jsonl in the phd-tooling repo, as raw evidence
+ * ------------------------------------------------------------------ */
+
+const $ = sel => document.querySelector(sel);
+const screens = { load: $("#load"), quiz: $("#quiz"), review: $("#review") };
+function show(name) {
+  for (const key in screens) screens[key].hidden = key !== name;
+  window.scrollTo(0, 0);
+}
+
+const REASONS = [
+  { value: "fabricated-quote", label: "fabricated-quote (no quote, or not in source)" },
+  { value: "quote-unsupported", label: "quote-unsupported (real quote, doesn't support question)" },
+  { value: "trivia", label: "trivia (real & supported, but a lookup value)" },
+  { value: "extraction-artifact", label: "extraction-artifact (quote is verbatim, source text is corrupt)" },
+];
+const REASON_KIND = Object.fromEntries([
+  ["fabricated-quote", "integrity"], ["quote-unsupported", "integrity"],
+  ["trivia", "quality"], ["extraction-artifact", "extraction"],
+]);
+
+let banks = [];      // [{name, data}]
+let sitting = [];     // flattened questions with bank provenance
+let pos = 0;
+let responses = [];   // accumulated feedback entries for this whole session
+
+function renderLoad() {
+  screens.load.innerHTML = `
+    <h1>vault-quizard</h1>
+    <p class="intro muted">Load one or more <code>*.quiz-bank.json</code> files -- one per chapter.
+      Loading several assembles them into one sitting; nothing is regenerated or re-verified here.</p>
+    <div class="filebox">
+      <input type="file" id="file-input" accept=".json" multiple>
+      <p class="muted" style="margin:10px 0 0">Question banks stay in your browser; nothing is uploaded anywhere.</p>
+    </div>
+    <div id="bank-list"></div>
+    <div class="toggles" style="margin:16px 0">
+      <label><input type="checkbox" id="shuffle-questions" checked> Shuffle question order across the sitting</label>
+    </div>
+    <button class="primary" id="start-button" disabled>Start quiz</button>
+  `;
+  $("#file-input").addEventListener("change", onFilesChosen);
+  $("#start-button").onclick = startQuiz;
+  show("load");
+}
+
+async function onFilesChosen(event) {
+  for (const file of event.target.files) {
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      if (!Array.isArray(data.questions)) throw new Error("no 'questions' array");
+      banks.push({ name: file.name, data });
+    } catch (err) {
+      alert(`Could not load ${file.name}: ${err.message}`);
+    }
+  }
+  renderBankList();
+}
+
+function renderBankList() {
+  const list = $("#bank-list");
+  list.innerHTML = banks.map((b, i) => `
+    <div class="bankline">
+      <span>${b.name} -- ${b.data.question_count ?? b.data.questions.length} question(s)
+        <span class="muted">(${b.data.source_file || "no source_file"})</span></span>
+      <button class="rm" data-idx="${i}" title="remove">✕</button>
+    </div>`).join("");
+  list.querySelectorAll("[data-idx]").forEach(btn => {
+    btn.onclick = () => { banks.splice(Number(btn.dataset.idx), 1); renderBankList(); };
+  });
+  $("#start-button").disabled = banks.length === 0;
+}
+
+function startQuiz() {
+  sitting = [];
+  for (const bank of banks) {
+    for (const q of bank.data.questions) {
+      sitting.push({
+        question: q,
+        bankName: bank.name,
+        selection: new Set(),
+        checked: false,
+        correct: false,
+        response: null,     // "accept" | "notice" | "reject"
+        reason: null,       // one of the four, only when response === "reject"
+        note: "",
+      });
+    }
+  }
+  if ($("#shuffle-questions").checked) {
+    for (let i = sitting.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [sitting[i], sitting[j]] = [sitting[j], sitting[i]];
+    }
+  }
+  pos = 0;
+  responses = [];
+  show("quiz");
+  renderQuestion();
+}
+
+function displayLabel(kind, index) {
+  if (kind === "tf") return "";
+  return String.fromCharCode(65 + index); // A, B, C, ...
+}
+
+function scoreItem(item) {
+  const correctSet = new Set(item.question.correct_indices);
+  item.correct = item.selection.size === correctSet.size &&
+    [...item.selection].every(i => correctSet.has(i));
+  return item.correct;
+}
+
+function renderQuestion() {
+  const item = sitting[pos];
+  const q = item.question;
+  const correctSet = new Set(q.correct_indices);
+
+  const optionHtml = q.options.map((opt, i) => {
+    let cls = "opt";
+    if (item.checked) {
+      cls += " locked";
+      if (correctSet.has(i)) cls += " correct";
+      else if (item.selection.has(i)) cls += " wrong";
+    } else if (item.selection.has(i)) {
+      cls += " selected";
+    }
+    const label = displayLabel(q.kind, i);
+    return `<button class="${cls}" data-opt="${i}">${label ? `<span class="key">${label}.</span>` : ""}<span>${escapeHtml(opt)}</span></button>`;
+  }).join("");
+
+  const warningsHtml = (q.warnings || []).map(w => {
+    const cls = w.kind === "quote" ? "danger" : "warn";
+    return `<div class="callout ${cls}"><strong>${w.kind}</strong>: ${escapeHtml(w.message)}</div>`;
+  }).join("");
+
+  let verdictHtml = "";
+  if (item.checked) {
+    const pointerBits = [];
+    if (q.location) pointerBits.push(escapeHtml(q.location));
+    if (q.quote) pointerBits.push(`"${escapeHtml(q.quote)}"`);
+    verdictHtml = `
+      <div class="verdict ${item.correct ? "ok" : "no"}">${item.correct ? "✓ Correct" : "✗ Incorrect"}</div>
+      ${pointerBits.length ? `<div class="muted" style="margin-top:6px">${pointerBits.join(" · ")}</div>` : ""}`;
+  }
+
+  const reasonSelectHtml = item.response === "reject" ? `
+    <select id="reason-select">
+      <option value="" ${!item.reason ? "selected" : ""} disabled>Choose a reason (required to reject)…</option>
+      ${REASONS.map(r => `<option value="${r.value}" ${item.reason === r.value ? "selected" : ""}>${r.label}</option>`).join("")}
+    </select>` : "";
+
+  screens.quiz.innerHTML = `
+    <header class="qhead">
+      <div><span class="qnum">Question ${pos + 1} / ${sitting.length}</span></div>
+      <div class="qsrc">${escapeHtml(item.bankName)}</div>
+    </header>
+    <div class="qtext">${escapeHtml(q.stem || "")}</div>
+    ${q.kind === "multi" ? '<div class="hint">Select all that apply.</div>' : ""}
+    ${warningsHtml}
+    ${optionHtml}
+    ${verdictHtml}
+    <div class="navrow">
+      <button id="prev" ${pos === 0 ? "disabled" : ""}>← Previous</button>
+      <span class="spacer"></span>
+      ${item.checked ? "" : `<button class="primary" id="check" ${item.selection.size ? "" : "disabled"}>Check answer</button>`}
+    </div>
+    ${item.checked ? `
+    <div class="feedback-row">
+      <div><strong>Response</strong> <span class="muted">(recorded when you advance)</span></div>
+      <div class="resp-btns">
+        <button data-resp="accept" class="${item.response === "accept" ? "chosen accept" : ""}">Accept</button>
+        <button data-resp="notice" class="${item.response === "notice" ? "chosen notice" : ""}">Slight notice</button>
+        <button data-resp="reject" class="${item.response === "reject" ? "chosen reject" : ""}">Reject</button>
+      </div>
+      ${reasonSelectHtml}
+      <textarea class="notebox" id="note-box" placeholder="Optional note…">${escapeHtml(item.note)}</textarea>
+      <div class="navrow">
+        <span class="spacer"></span>
+        <button class="primary" id="next" ${canAdvance(item) ? "" : "disabled"}>
+          ${pos === sitting.length - 1 ? "Finish" : "Next →"}
+        </button>
+      </div>
+    </div>` : ""}
+  `;
+
+  screens.quiz.querySelectorAll("[data-opt]").forEach(btn => {
+    btn.onclick = () => {
+      if (item.checked) return;
+      const i = Number(btn.dataset.opt);
+      if (q.kind === "multi") {
+        item.selection.has(i) ? item.selection.delete(i) : item.selection.add(i);
+      } else {
+        item.selection.clear();
+        item.selection.add(i);
+      }
+      renderQuestion();
+    };
+  });
+  const check = $("#check");
+  if (check) check.onclick = () => { item.checked = true; scoreItem(item); renderQuestion(); };
+  $("#prev").onclick = () => { pos -= 1; renderQuestion(); };
+
+  screens.quiz.querySelectorAll("[data-resp]").forEach(btn => {
+    btn.onclick = () => {
+      item.response = btn.dataset.resp;
+      if (item.response !== "reject") item.reason = null;
+      renderQuestion();
+      // Re-focus the note box after a re-render triggered by a response click.
+      const note = $("#note-box");
+      if (note) note.focus();
+    };
+  });
+  const reasonSelect = $("#reason-select");
+  if (reasonSelect) reasonSelect.onchange = () => { item.reason = reasonSelect.value || null; renderQuestion(); };
+  const noteBox = $("#note-box");
+  if (noteBox) noteBox.oninput = () => { item.note = noteBox.value; };
+
+  const next = $("#next");
+  if (next) next.onclick = () => advance();
+}
+
+function canAdvance(item) {
+  if (!item.response) return false;          // a response is required before advancing
+  if (item.response === "reject" && !item.reason) return false; // reject needs a reason
+  return true;
+}
+
+function advance() {
+  const item = sitting[pos];
+  if (!canAdvance(item)) return; // guards the click too, in case the button's disabled state is stale
+
+  responses.push({
+    timestamp: new Date().toISOString(),
+    response: item.response,
+    reason: item.response === "reject" ? item.reason : null,
+    kind: item.response === "reject" ? REASON_KIND[item.reason] : null,
+    source_file: item.question.source_file || null,
+    stem: item.question.stem || "",
+    note: item.note || "",
+    correct: item.correct,
+  });
+
+  if (pos === sitting.length - 1) {
+    renderReview();
+  } else {
+    pos += 1;
+    renderQuestion();
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+function renderReview() {
+  const score = sitting.filter(i => i.correct).length;
+
+  const rejectionEntries = responses
+    .filter(r => r.response === "reject")
+    .map(r => ({
+      timestamp: r.timestamp, reason: r.reason, kind: r.kind,
+      source_file: r.source_file, stem: r.stem, note: r.note,
+    }));
+  const rejectionsJsonl = rejectionEntries.map(e => JSON.stringify(e)).join("\n");
+  const fullSessionJsonl = responses.map(r => JSON.stringify(r)).join("\n");
+
+  screens.review.innerHTML = `
+    <h1>Results</h1>
+    <div class="scorebig" style="font-size:2.2rem;font-weight:bold">${score} / ${sitting.length}</div>
+    <p class="muted">${Math.round(100 * score / sitting.length)}% ·
+      ${responses.filter(r => r.response === "reject").length} rejected ·
+      ${responses.filter(r => r.response === "notice").length} flagged with a notice</p>
+
+    <h2>Rejections -- append to phd-tooling/.claude/skills/vault-quizard/logs/rejections.jsonl</h2>
+    <p class="muted">Schema-compatible with reject.py; distill_rejections.py reads this file.</p>
+    <div class="exportbox">
+      <button id="copy-rejections" ${rejectionEntries.length ? "" : "disabled"}>Copy rejections block</button>
+      <div class="copy-status" id="copy-status-1"></div>
+      <pre class="log">${escapeHtml(rejectionsJsonl || "(none this session)")}</pre>
+    </div>
+
+    <h2>Full session log -- append to phd-tooling/.claude/skills/vault-quizard/logs/responses.jsonl</h2>
+    <p class="muted">Every response, including accepts -- raw evidence, not fed to generation.</p>
+    <div class="exportbox">
+      <button id="copy-full">Copy full session block</button>
+      <div class="copy-status" id="copy-status-2"></div>
+      <pre class="log">${escapeHtml(fullSessionJsonl)}</pre>
+    </div>
+
+    <div class="navrow">
+      <button id="review-questions">Review questions</button>
+      <span class="spacer"></span>
+      <button class="primary" id="new-sitting">New sitting</button>
+    </div>
+  `;
+  $("#copy-rejections").onclick = () => copyText(rejectionsJsonl, "#copy-status-1");
+  $("#copy-full").onclick = () => copyText(fullSessionJsonl, "#copy-status-2");
+  $("#review-questions").onclick = () => { pos = 0; show("quiz"); renderQuestion(); };
+  $("#new-sitting").onclick = () => { banks = []; renderLoad(); };
+  show("review");
+}
+
+async function copyText(text, statusSel) {
+  let copied = false;
+  try {
+    await navigator.clipboard.writeText(text);
+    copied = true;
+  } catch (_) {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    copied = document.execCommand("copy");
+    area.remove();
+  }
+  $(statusSel).textContent = copied ? "Copied." : "Copy failed -- select the block above and copy manually.";
+}
+
+renderLoad();
+</script>
+</body>
+</html>

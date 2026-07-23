@@ -10,12 +10,17 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import reject  # noqa: E402
 
 
-def test_reasons_are_the_three_kinds():
-    assert set(reject.REASONS) == {"fabricated-quote", "quote-unsupported", "trivia"}
-    # Integrity vs quality split kept, so distillation can triage without dilution.
+def test_reasons_are_the_four_kinds():
+    assert set(reject.REASONS) == {
+        "fabricated-quote", "quote-unsupported", "trivia", "extraction-artifact",
+    }
+    # Integrity vs quality vs extraction split kept, so distillation can triage
+    # without dilution -- extraction-artifact must never fall into "integrity"
+    # (it is not fabrication; the remedy is re-extraction, not careful generation).
     assert reject.REASONS["fabricated-quote"] == "integrity"
     assert reject.REASONS["quote-unsupported"] == "integrity"
     assert reject.REASONS["trivia"] == "quality"
+    assert reject.REASONS["extraction-artifact"] == "extraction"
 
 
 def test_make_entry_populates_fields():
@@ -29,6 +34,17 @@ def test_make_entry_populates_fields():
     assert entry["stem"] == "What is the value of x?"
     assert entry["note"] == "lookup"
     assert entry["timestamp"] == "2026-07-21T10:00:00"
+
+
+def test_extraction_artifact_is_not_integrity():
+    entry = reject.make_entry(
+        "extraction-artifact", "Sources/Chapter 1.extract.txt",
+        "What does the entropy equal at the critical point?",
+        note="quote is verbatim but the source equation is missing a sign",
+    )
+    assert entry["reason"] == "extraction-artifact"
+    assert entry["kind"] == "extraction"
+    assert entry["kind"] not in ("integrity", "quality")
 
 
 def test_make_entry_rejects_unknown_reason():
@@ -69,27 +85,16 @@ def test_cli_appends_and_validates():
         assert entry["reason"] == "quote-unsupported"
 
 
-def test_default_log_lands_in_vault_dotquiz():
-    # With a vault root and no --log, the log goes to <vault>/.quiz/rejections.jsonl,
-    # created on demand -- one shared file that syncs with the vault.
-    with tempfile.TemporaryDirectory() as vault:
-        rc = reject.main([
-            "--reason", "trivia",
-            "--source-file", "Notes/x.md",
-            "--stem", "What is the value?",
-            "--vault-root", vault,
-        ])
-        assert rc == 0
-        expected = os.path.join(vault, ".quiz", "rejections.jsonl")
-        assert os.path.exists(expected)
-        with open(expected, encoding="utf-8") as fh:
-            assert json.loads(fh.readline())["reason"] == "trivia"
+def test_default_log_lands_beside_script_in_tooling_repo():
+    # With no --log, the log goes to logs/rejections.jsonl beside reject.py --
+    # versioned with the skill, not with any particular vault.
+    here = os.path.dirname(os.path.abspath(reject.__file__))
+    assert reject.DEFAULT_LOG == os.path.join(here, "logs", "rejections.jsonl")
 
 
 def test_resolve_log_path_prefers_explicit():
-    assert reject.resolve_log_path("/tmp/x.jsonl", "/vault") == "/tmp/x.jsonl"
-    assert reject.resolve_log_path(None, "/vault").endswith(os.path.join(".quiz", "rejections.jsonl"))
-    assert reject.resolve_log_path(None, None) is None
+    assert reject.resolve_log_path("/tmp/x.jsonl") == "/tmp/x.jsonl"
+    assert reject.resolve_log_path(None) == reject.DEFAULT_LOG
 
 
 def _run():

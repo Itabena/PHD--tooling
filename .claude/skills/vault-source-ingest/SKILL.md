@@ -119,6 +119,7 @@ Layout:
     Chapter 2 — <title>.md   ← empty stub
     …
     Exercises/               ← per the ask below
+    Extraction/              ← raw.txt/extract.txt per chapter, screenshot PNGs (PDF sources only)
 ```
 
 - **Hub note**: the same citation header as a paper (with `type: book`, plus the
@@ -162,38 +163,64 @@ every other stub body is — that part is the work.
 The statement is the one place a model must not write the content. A retyped
 exercise drifts silently — a flipped sign, a dropped subscript, a lost condition
 in a subclause — and a subtly wrong statement costs hours spent carefully solving
-the wrong problem. So the statement is **extracted mechanically** — pulled from
-the PDF with nothing in between that could paraphrase — then run through the
-glyph map below, never through a model. Fallbacks, in order:
+the wrong problem. So the statement is never transcribed by a model, full stop.
 
-1. **Extracted + glyph-mapped text** by default (see below).
-2. **A cropped screenshot** of the exercise embedded in the stub, when the
-   extraction is unreadable — math-heavy exercises extract as noise. No model
-   touches the content either way; the cost is the image is not searchable or
-   quotable, so a quiz can never cite it (acceptable for a statement I read
-   rather than search).
-3. **A pointer** — chapter, problem number, page — when there is neither. An
-   honest pointer beats a plausible transcription.
+**One shape for every exercise (decided 23/07/2026, superseding the earlier
+extract-then-screenshot waterfall): a screenshot, plus a plain-text pointer and
+a Zotero deep link, always together.** Comparing both on the problems that did
+extract cleanly, the screenshot won anyway — visually faithful, no PDF-artifact
+noise, nothing to read carefully for a mangled subscript. Once the crop is
+automatic there is no real cost to always taking it, so text extraction is no
+longer attempted as an exercise-statement path at all (it remains exactly how a
+*chapter's* `.extract.txt` gets built, which is a different job — see below).
+
+1. **A cropped screenshot**, automated by
+   `extraction/crop_exercise_screenshot.py` in the tooling repo: `pdftotext
+   -bbox` locates the problem's region from its own label to the next one,
+   `pdftoppm` renders the page, Pillow crops it. Purely mechanical, same
+   discipline as the glyph map — it locates a *position*, never reads content
+   for meaning. It refuses (rather than guesses) on three cases: the problem
+   spans a page break, the page looks multi-column and the region straddles
+   both sides, or there is no next label to bound the crop against (the last
+   problem in a chapter). A refusal falls through to the floor below.
+2. **A Zotero deep link plus a plain-text pointer** (chapter, problem number,
+   page) — always both together, never either alone, and always present
+   alongside the screenshot when one exists: the screenshot is not searchable
+   or quotable, so the link/pointer is what lets me jump to the page rather
+   than just read the image. The link is a dependency (needs Zotero installed
+   and synced, which isn't true on mobile Obsidian or an unset-up machine), so
+   the plain pointer is what's left when it doesn't resolve. Where a crop
+   cannot be produced at all, this pair is the floor on its own.
 
 Never let a model fill the gap between these steps.
 
-## The extraction artifact: what gets frozen
+## The extraction artifact: what gets frozen, and where it lives
 
 Implements `a - logistics/Source Note Types.md` -> "What exactly gets frozen"
-(decided 23/07/2026) — read that section for the reasoning; this is the
-mechanics. Extraction is two steps, and each freezes its own file, sitting
-beside the note it serves, both frozen at ingest and never overwritten on
+and "Scope of a frozen extract" (both decided 23/07/2026) — read those sections
+for the reasoning; this is the mechanics. Extraction is two steps, and each
+freezes its own file, both frozen at ingest and never overwritten on
 re-extraction (a new dated file instead):
 
-1. **Tool extracts.** Run `pdftotext -layout` (poppler) over the PDF pages the
-   note covers. This raw output is frozen unchanged as `<source name>.raw.txt`.
+1. **Tool extracts.** Run `pdftotext -layout` (poppler) over the **whole
+   chapter's** physical page range, not just a section of it — a
+   Problems-only extract is enough for exercise stubs and useless for
+   anything else, and `vault-quizard` fixes quiz generation at one chapter at
+   a time, reading this same file. This raw output is frozen unchanged as
+   `<chapter name>.raw.txt`.
 2. **Map repairs.** Run the raw text through `extraction/apply_glyph_map.py` in
    the tooling repo, against `extraction/glyph-map.tsv` — a plain, ordered,
    literal find/replace table (no regex, no inference, no LaTeX wrapping). The
-   **result is the canonical artifact**, frozen as `<source name>.extract.txt`.
-   Quote-matching (`vault-quizard`, once its PDF path exists) checks against
-   this file, not the raw one — freezing the raw text but mapping downstream
-   would make a quote containing a repaired glyph fail a check it should pass.
+   **result is the canonical artifact**, frozen as `<chapter name>.extract.txt`.
+   `vault-quizard`'s quote-matching checks against this file, not the raw one —
+   freezing the raw text but mapping downstream would make a quote containing
+   a repaired glyph fail a check it should pass.
+
+Both files, plus any exercise screenshot PNGs, go in an **`Extraction/`
+subfolder inside the book's own folder** — not loose beside the chapter stub
+notes, which stays just the hub note, the chapter stubs, and `Exercises/`.
+Named to avoid colliding with the vault's own top-level `a - logistics/` folder
+in search and links.
 
 The map is a **versioned data file in the tooling repo**
 (`phd-tooling/extraction/glyph-map.tsv`), not prose here, because it must be
@@ -215,4 +242,4 @@ fallback above, decided by hand.
 - [[a - logistics/Source Note Types|Source Note Types]] — the governing standard
 - [[aa- Dashboard|AI Use Policy]] — scaffolding vs. review-required tiers
 - [[a - logistics/Writing Style and Voice|Writing Style and Voice]] — governs how the body gets written (by me, later)
-- `vault-quizard` — the downstream consumer of `<source name>.extract.txt`; its own PDF/quote-matching path is still deferred until that skill grows one
+- `vault-quizard` — the downstream consumer of `<chapter name>.extract.txt`; generates and verifies one chapter's quiz at a time against exactly this file
