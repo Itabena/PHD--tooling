@@ -1,0 +1,7 @@
+# Python 3.13 recommended (3.14 not yet supported by the manim ecosystem).
+# Also needs, outside pip: ffmpeg (on PATH) and gifsicle.
+#   - ffmpeg:   choco install ffmpeg   (or gyan.dev build on PATH)
+#   - gifsicle: npm install gifsicle   (binary lands in node_modules/gifsicle/vendor/)
+manim==0.20.1
+matplotlib>=3.10
+numpy>=2.0
