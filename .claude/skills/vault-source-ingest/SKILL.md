@@ -183,6 +183,12 @@ longer attempted as an exercise-statement path at all (it remains exactly how a
    spans a page break, the page looks multi-column and the region straddles
    both sides, or there is no next label to bound the crop against (the last
    problem in a chapter). A refusal falls through to the floor below.
+   **Not bit-for-bit reproducible run-to-run** (confirmed on Windows,
+   2026-07-23): re-cropping the same page can differ by a pixel or two of
+   antialiasing between separate `pdftoppm` renders. Content is always
+   correct; don't expect an exact byte/hash match against a previous crop of
+   the same problem as a correctness check — compare visually or by pixel
+   diff, not by hash.
 2. **A Zotero deep link plus a plain-text pointer** (chapter, problem number,
    page) — always both together, never either alone, and always present
    alongside the screenshot when one exists: the screenshot is not searchable
@@ -215,6 +221,31 @@ re-extraction (a new dated file instead):
    `vault-quizard`'s quote-matching checks against this file, not the raw one —
    freezing the raw text but mapping downstream would make a quote containing
    a repaired glyph fail a check it should pass.
+3. **Math-glyph resolution (added 2026-07-23, optional, run after step 2).**
+   `extraction/resolve_math_glyphs.py PDF.pdf CHAPTER.raw.txt --page-range N M
+   --map extraction/glyph-map.tsv -o CHAPTER.extract.txt` resolves a real
+   subset of the control-byte fallbacks `apply_glyph_map.py` can only flag —
+   by reading each font's own `/Encoding /Differences` array straight out of
+   the PDF (via `pikepdf`) and mapping the declared glyph name to Unicode via
+   the Adobe Glyph List (`fontTools.agl`), substituting only at the exact
+   position confirmed by aligning against the PDF's content stream. Needs
+   `pikepdf` + `fontTools` in the `pdftools` env (conda-forge, same pinning
+   discipline as poppler/Pillow). Cut Pathria Ch.2 from 95 to 60 flagged
+   lines with zero incorrect substitutions, once a real bug was fixed along
+   the way (see the tool's own docstring: a byte-value resolution applied as
+   a blind global replace silently overwrote an unrelated glyph that
+   happens to share the same fallback byte elsewhere — substitution must be
+   positional, never by byte value alone). Genuinely can't reach isolated
+   symbols inside stacked multi-line equations (integral bounds, big
+   parens) — the content stream draws those out of reading order for
+   layout, which defeats simple stream-order alignment. **No automated
+   fallback exists for these** — unlike an exercise statement, a chapter
+   passage has no clean label-to-next-label boundary to crop against, so
+   `crop_exercise_screenshot.py`'s mechanism doesn't apply here. The lines
+   stay correctly flagged (never guessed) and simply can't be used as a
+   verbatim `source_quote` for a quiz question; the underlying content
+   isn't lost from the vault or unreadable to a person, it's just
+   unavailable to the automated quote-verification step specifically.
 
 Both files, plus any exercise screenshot PNGs, go in an **`Extraction/`
 subfolder inside the book's own folder** — not loose beside the chapter stub
@@ -236,6 +267,29 @@ so a rejoin rule would corrupt legitimate notation as often as it fixes garbled
 prose. `apply_glyph_map.py --flag-letter-spacing` detects a suspected run and
 reports it; it never rewrites. A flagged line is a candidate for the screenshot
 fallback above, decided by hand.
+
+**Confirmed non-injective fallback bytes (why a blind add-to-the-map fix
+doesn't work): the same byte can mean different glyphs in different places,
+even within one chapter.** First seen in Pathria Ch.1 (byte `0x04` served
+both Ω in running prose and one stroke of an oversized stacked parenthesis).
+Confirmed recurring in Ch.2 (2026-07-23): byte `0x03` is Δ in `(E − Δ, E]`
+but the ensemble-average brackets `⟨`/`⟩` a few lines later; byte `0x07` is
+an integral sign in the Liouville flux equations but Γ (Pathria's own symbol
+for multiplicity, not the more common Ω) in `S = k ln Γ = k ln(ω/ω0)`. A
+single `glyph-map.tsv` row per byte would be wrong in roughly half its own
+occurrences in a case like this.
+
+**Don't trust "obvious" physics convention over what the font actually
+declares — this was gotten wrong twice while resolving Ch.2** (2026-07-23):
+the first pass assumed the energy-width symbol must be ε (textbook
+convention) and the multiplicity symbol must be Ω (ditto) — both wrong.
+The PDF's own `/Encoding /Differences` array said `Delta1` and `Gamma1`
+respectively, and a direct crop of the rendered glyph confirmed it: Pathria's
+own notation is Δ and Γ, not the more textbook-common ε and Ω. Trust the
+font's declared glyph name (or a direct visual crop when the name itself is
+ambiguous, like MathType's own operator-variant names) over what convention
+says "should" be there — see `resolve_math_glyphs.py`, added the same day
+this was caught.
 
 ## See also
 
