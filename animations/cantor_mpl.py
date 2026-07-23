@@ -51,7 +51,9 @@ plt.tight_layout(pad=0.4)
 base = ("C:/Users/itama/Documents/My Projects/Phd/Notes_phd/z-Assets/"
         "ITFNS-animations/ch5-chaos-rg/cantor-set-box-counting.svg")
 import os
+from components import refuse_if_exists
 os.makedirs(os.path.dirname(base), exist_ok=True)
+refuse_if_exists(base)
 fig.savefig(base, facecolor=BG, format="svg")
 fig.savefig("cantor_preview.png", facecolor=BG, dpi=110)
 print("saved svg + preview")

@@ -68,7 +68,9 @@ plt.tight_layout(rect=[0, 0.06, 1, 0.95])
 base = ("C:/Users/itama/Documents/My Projects/Phd/Notes_phd/z-Assets/"
         "ITFNS-animations/ch2-info-coding/channel-capacity-sphere-packing.svg")
 import os
+from components import refuse_if_exists
 os.makedirs(os.path.dirname(base), exist_ok=True)
+refuse_if_exists(base)
 fig.savefig(base, facecolor=BG, format="svg")
 fig.savefig("sphere_preview.png", facecolor=BG, dpi=110)
 print("saved", len(centers), "packed,", len(covers), "covers")

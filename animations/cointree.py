@@ -71,7 +71,9 @@ ax.text(13.5, -0.25,
 base = ("C:/Users/itama/Documents/My Projects/Phd/Notes_phd/z-Assets/"
         "ITFNS-animations/exercises/counterfeit-coin-ternary-tree.svg")
 import os
+from components import refuse_if_exists
 os.makedirs(os.path.dirname(base), exist_ok=True)
+refuse_if_exists(base)
 fig.savefig(base, facecolor=BG, format="svg")
 fig.savefig("cointree_preview.png", facecolor=BG, dpi=105)
 print("saved")

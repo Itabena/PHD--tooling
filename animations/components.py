@@ -6,7 +6,7 @@ differently (axes boilerplate, a time readout, a boxed constant-value
 callout, the point-cloud density-image trick). Import both:
 
     from itfns import WARM, COOL, GRAYM
-    from components import styled_axes, time_readout, boxed_readout, density_image, colorize_density
+    from components import styled_axes, time_readout, boxed_readout, density_image, colorize_density, refuse_if_exists
 
 Every helper here was extracted from real working scenes, not designed in
 the abstract -- where two source scenes disagreed on a detail, the
@@ -16,6 +16,8 @@ is for new scenes to build on.
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
 from typing import Callable, Optional
 
 import numpy as np
@@ -109,3 +111,27 @@ def density_image(points: np.ndarray, res: int, norm: Optional[float] = None) ->
     if norm is not None:
         hist = hist / norm
     return hist
+
+
+def refuse_if_exists(path) -> None:
+    """Guard for the static-SVG scripts (spherepack.py, cantor_mpl.py,
+    cointree.py, rdcurve.py), which `savefig` straight to a hardcoded vault
+    path with no destination argument of their own. Call this immediately
+    before the real `savefig` -- refuses (prints and exits) if the target
+    already exists, unless `--overwrite` is on the command line.
+
+    Added 2026-07-23 after cointree.py silently overwrote its own committed
+    vault asset mid-session (caught via `git status` and restored by hand,
+    but the script itself had no guard against it). Same principle as
+    build_gif.sh's destination guard: overwriting a committed asset is a
+    decision to make explicitly, not a side effect of re-running a script.
+    """
+    p = Path(path)
+    if p.exists() and "--overwrite" not in sys.argv:
+        print(
+            f"REFUSED: {p} already exists -- pass --overwrite to replace a "
+            "committed asset intentionally, rather than clobber it as a side "
+            "effect of re-running this script.",
+            file=sys.stderr,
+        )
+        sys.exit(2)

@@ -71,16 +71,23 @@ pipeline, full stop.
 4. **Render:**
    - Manim scene:
      ```
-     bash build_gif.sh <file>.py <SceneClass> <output>.gif <vault-chapter-folder>
+     bash build_gif.sh <file>.py <SceneClass> <output>.gif <full-vault-dest-dir> [--overwrite]
      ```
+     `<full-vault-dest-dir>` is the **full vault path** to save into (e.g.
+     `.../z-Assets/ITFNS-animations/ch4-random-walks` or
+     `.../z-Assets/general-derivations`) — not a bare folder name, and there
+     is no default. The script refuses outright if it's omitted, and refuses
+     to overwrite a file that already exists unless `--overwrite` is passed.
      Renders 720p30 via ManimCE, converts to a 16 fps looping palette GIF via
-     ffmpeg, optimises with `gifsicle -O3`, copies straight into the vault
-     folder. Needs the local render toolchain set up once per machine (below).
+     ffmpeg, optimises with `gifsicle -O3`, copies to the given destination.
+     Needs the local render toolchain set up once per machine (below).
    - Static matplotlib script: just run it (`python <file>.py`). The
      existing four (`spherepack.py`, `cantor_mpl.py`, `cointree.py`,
      `rdcurve.py`) write straight to their vault SVG path inside the script
-     itself — match that for a new static entry rather than adding an
-     external copy step.
+     itself, guarded by `components.refuse_if_exists` immediately before
+     `savefig` — re-running one of them without `--overwrite` on the command
+     line refuses rather than silently clobbers the committed asset. Match
+     both (the direct write *and* the guard) for a new static entry.
 5. **Confirm house style before calling it done:** dark background (manim
    default, matches Obsidian dark mode), short side ≥ 720 px, ~15–20 fps
    if a GIF, under ~8 MB (re-run `gifsicle -O3` if not); warm = expansion,
@@ -122,8 +129,33 @@ machine: `choco install ffmpeg`), and a **local, not global**, gifsicle —
 build tooling, recreated from `requirements.txt` and `npm install`, not repo
 content.
 
+**Fixed 2026-07-23 (was: hardcoded `z-Assets/ITFNS-animations/$4` destination,
+silently misfiling anything outside the ITFNS catalog).** `build_gif.sh` no
+longer knows "ITFNS" exists — the destination is now a required, full-path
+argument (see the render command above), with no default, and the script
+refuses outright if it's omitted rather than falling back into
+`ITFNS-animations/`. It also refuses to overwrite a file that already
+exists unless `--overwrite` is passed. Regression-tested against 2-3
+existing entries (byte-identical output at the same destination, just via
+the new explicit-path call) before landing this. The four static-SVG
+scripts got the equivalent guard via `components.refuse_if_exists`, since
+they have the same hardcoded-live-path shape (this is what let `cointree.py`
+silently overwrite its own committed asset earlier in the same session).
+
 ## Stop and ask before
 
+- **Writing any scene code for a from-scratch entry — one not already fully
+  specified by an existing asset-organisation note's row — before an actual
+  back-and-forth about what the animation should show.** A technically
+  correct, working render can still land as too simplistic if the brief was
+  thin (confirmed 2026-07-23, the n-D spherical coordinates benchmark scene:
+  "nice gif, a little bit too simplistic but this is probably my fault of
+  not explaining more thoroughly"). Ask about the intended visual complexity
+  — how many steps or cases to show, one reused panel vs. several side by
+  side, what the closing/"hero" beat should emphasize — and wait for actual
+  answers before writing any scene code. This does not apply to a cataloged
+  entry (one of the 28 ITFNS scenes, or any future course's equivalent) —
+  that note's own asset-organisation row already *is* the spec.
 - **Creating any `z-Assets/` folder beyond the ones that already exist** for
   a course — a brand-new course's own `<course>-animations/` tree is a real
   structural decision, not a scaffolding one.
@@ -137,8 +169,8 @@ content.
 ## Files
 
 - `itfns.py` — shared palette (`WARM`/`WARM2`/`HOT`/`COOL`/`COOL2`/`GRAYM`/`VIOLET`), imported by every scene regardless of which course it's for
-- `components.py` — shared geometry/plotting idioms (`styled_axes`, `time_readout`, `boxed_readout`, `density_image` + `colorize_density`); flags two spots where the source scenes disagreed rather than silently resolving them
-- `build_gif.sh` — `<pyfile> <SceneClass> <output.gif> <vault-chapter-folder>`; manim render → ffmpeg palette GIF → gifsicle -O3 → copy into vault
+- `components.py` — shared geometry/plotting idioms (`styled_axes`, `time_readout`, `boxed_readout`, `density_image` + `colorize_density`); flags two spots where the source scenes disagreed rather than silently resolving them. Also `refuse_if_exists` — the overwrite guard the four static-SVG scripts call before `savefig`
+- `build_gif.sh` — `<pyfile> <SceneClass> <output.gif> <full-vault-dest-dir> [--overwrite]`; manim render → ffmpeg palette GIF → gifsicle -O3 → copy into the given destination; refuses with no destination and refuses to overwrite without `--overwrite`
 - `requirements.txt` — `manim==0.20.1`, matplotlib, numpy; Python 3.13
 - the 28 existing scene files — the reference scenes `components.py` was factored out of; `README.md` has the tier classification and file → entry# → scene-class map
 - `README.md` — setup, render command, tier table, house-style summary, and the "never put continuously-changing `MathTex` in `always_redraw`" performance note (10+ minute renders otherwise)

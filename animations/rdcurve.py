@@ -58,7 +58,9 @@ ax.grid(True, color=GRAYM, alpha=0.15)
 base = ("C:/Users/itama/Documents/My Projects/Phd/Notes_phd/z-Assets/"
         "ITFNS-animations/exercises/rate-distortion-binary-source-curve.svg")
 import os
+from components import refuse_if_exists
 os.makedirs(os.path.dirname(base), exist_ok=True)
+refuse_if_exists(base)
 fig.savefig(base, facecolor=BG, format="svg", bbox_inches="tight")
 fig.savefig("rd_preview.png", facecolor=BG, dpi=105, bbox_inches="tight")
 print("saved; Sb(p)=", round(Sb(P), 3), "beta=", round(beta, 3))
